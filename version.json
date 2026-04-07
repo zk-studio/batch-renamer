@@ -1,0 +1,6 @@
+{
+    "version": "1.0.0",
+    "download_url": "https://your-server.com/batch-renamer/BatchRenamer_Setup_1.0.0.exe",
+    "changelog": "v1.0.0 首发版本\n- 添加前缀/后缀\n- 查找替换\n- 序号批量命名\n- 修改扩展名\n- 一键撤销\n- 开机自动检查更新",
+    "mandatory": false
+}

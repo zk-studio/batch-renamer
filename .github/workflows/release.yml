@@ -1,0 +1,151 @@
+# ═══════════════════════════════════════════════════
+#  自动发布工作流
+#  触发条件：推送 v* tag（例如 git push origin v1.0.0）
+#  动作：构建 EXE → 打包安装包 → 创建 GitHub Release
+# ═══════════════════════════════════════════════════
+
+name: 📦 Build & Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: 🏗️ Build Windows Installer
+    runs-on: windows-latest
+
+    steps:
+      # ── 检出代码 ──
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      # ── 配置 Python ──
+      - name: 🐍 Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      # ── 安装依赖 ──
+      - name: 📦 Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyinstaller
+
+      # ── 从 tag 提取版本号 ──
+      - name: 🏷️ Get version from tag
+        id: version
+        shell: bash
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/v}
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Building version: $VERSION"
+
+      # ── 更新代码中的版本号 ──
+      - name: 📝 Update version in code
+        shell: python
+        run: |
+          version = "${{ steps.version.outputs.version }}"
+          with open("app/__init__.py", "r", encoding="utf-8") as f:
+              content = f.read()
+          import re
+          content = re.sub(r'__version__\s*=\s*"[^"]*"', f'__version__ = "{version}"', content)
+          with open("app/__init__.py", "w", encoding="utf-8") as f:
+              f.write(content)
+          print(f"Updated version to {version}")
+
+      # ── PyInstaller 打包 ──
+      - name: 🔨 Build with PyInstaller
+        run: |
+          pyinstaller --noconfirm --onedir --windowed --name "BatchRenamer" --clean main.py
+
+      # ── 安装 Inno Setup ──
+      - name: 📦 Install Inno Setup
+        shell: powershell
+        run: |
+          choco install innosetup -y --no-progress
+          echo "C:\Program Files (x86)\Inno Setup 6" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+
+      # ── 下载中文语言包 ──
+      - name: 🌐 Download Chinese language for Inno Setup
+        shell: powershell
+        run: |
+          $langDir = "C:\Program Files (x86)\Inno Setup 6\Languages"
+          Invoke-WebRequest -Uri "https://raw.githubusercontent.com/jrsoftware/issrc/main/Files/Languages/Unofficial/ChineseSimplified.isl" -OutFile "$langDir\ChineseSimplified.isl"
+
+      # ── 更新 setup.iss 版本号 ──
+      - name: 📝 Update Inno Setup version
+        shell: python
+        run: |
+          version = "${{ steps.version.outputs.version }}"
+          with open("setup.iss", "r", encoding="utf-8") as f:
+              content = f.read()
+          import re
+          content = re.sub(r'#define MyAppVersion ".*?"', f'#define MyAppVersion "{version}"', content)
+          with open("setup.iss", "w", encoding="utf-8") as f:
+              f.write(content)
+          print(f"Updated setup.iss version to {version}")
+
+      # ── 编译安装包 ──
+      - name: 📦 Build Installer with Inno Setup
+        run: iscc setup.iss
+
+      # ── 创建便携版 ZIP ──
+      - name: 📦 Create Portable ZIP
+        shell: powershell
+        run: |
+          Compress-Archive -Path "dist\BatchRenamer\*" -DestinationPath "installer_output\BatchRenamer_Portable_${{ steps.version.outputs.version }}.zip"
+
+      # ── 生成 Release Notes ──
+      - name: 📝 Generate Release Notes
+        id: changelog
+        shell: python
+        run: |
+          import os, re
+          version = "${{ steps.version.outputs.version }}"
+
+          # 尝试从 CHANGELOG.md 提取当前版本的更新说明
+          notes = ""
+          try:
+              with open("CHANGELOG.md", "r", encoding="utf-8") as f:
+                  content = f.read()
+              # 匹配当前版本的区块
+              pattern = rf"## \[{re.escape(version)}\].*?\n(.*?)(?=\n## \[|\Z)"
+              match = re.search(pattern, content, re.DOTALL)
+              if match:
+                  notes = match.group(1).strip()
+          except Exception:
+              pass
+
+          if not notes:
+              notes = f"🎉 版本 v{version} 发布\n\n请查看 CHANGELOG.md 了解详细更新内容。"
+
+          # 添加下载说明
+          notes += "\n\n---\n\n"
+          notes += "## 📥 下载\n\n"
+          notes += f"| 文件 | 说明 |\n"
+          notes += f"|------|------|\n"
+          notes += f"| `BatchRenamer_Setup_{version}.exe` | **安装包**（推荐，含中文安装向导） |\n"
+          notes += f"| `BatchRenamer_Portable_{version}.zip` | **便携版**（解压即用，无需安装） |\n"
+
+          # 写入环境文件
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as f:
+              f.write(f"notes<<EOF\n{notes}\nEOF\n")
+
+      # ── 创建 GitHub Release ──
+      - name: 🚀 Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: "v${{ steps.version.outputs.version }}"
+          body: ${{ steps.changelog.outputs.notes }}
+          draft: false
+          prerelease: false
+          files: |
+            installer_output/BatchRenamer_Setup_${{ steps.version.outputs.version }}.exe
+            installer_output/BatchRenamer_Portable_${{ steps.version.outputs.version }}.zip

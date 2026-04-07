@@ -1,0 +1,46 @@
+# ═══════════════════════════════════════════════════
+#  CI 构建检查
+#  每次 push 和 PR 时验证代码能正常打包
+# ═══════════════════════════════════════════════════
+
+name: 🔍 CI Build Check
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build-check:
+    name: 🏗️ Build Check
+    runs-on: windows-latest
+
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 🐍 Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: 📦 Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyinstaller
+
+      - name: ✅ Verify imports
+        run: python -c "from app.main_window import MainWindow; print('✅ Imports OK')"
+
+      - name: 🔨 Build with PyInstaller
+        run: pyinstaller --noconfirm --onedir --windowed --name "BatchRenamer" --clean main.py
+
+      - name: 📦 Upload Build Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: BatchRenamer-build
+          path: dist/BatchRenamer/
+          retention-days: 7

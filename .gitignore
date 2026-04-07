@@ -1,0 +1,41 @@
+# ═══════════════════════════════════════
+#  Python / PySide6 / PyInstaller
+# ═══════════════════════════════════════
+
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Distribution / packaging
+build/
+dist/
+*.spec
+*.egg-info/
+*.egg
+
+# Installer output
+installer_output/
+
+# PyInstaller
+*.manifest
+
+# Virtual environments
+.venv/
+venv/
+ENV/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+Thumbs.db
+Desktop.ini
+.DS_Store
+
+# Logs
+*.log
