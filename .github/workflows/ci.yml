@@ -33,7 +33,9 @@ jobs:
           pip install pyinstaller
 
       - name: ✅ Verify imports
-        run: python -c "from app.main_window import MainWindow; print('✅ Imports OK')"
+        env:
+          PYTHONUTF8: "1"
+        run: python -c "from app.main_window import MainWindow; print('Imports OK')"
 
       - name: 🔨 Build with PyInstaller
         run: pyinstaller --noconfirm --onedir --windowed --name "BatchRenamer" --clean main.py
